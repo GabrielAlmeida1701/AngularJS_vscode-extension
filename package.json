@@ -1,8 +1,8 @@
 {
-	"name": "angularjs_ext",
+	"name": "angularjsautocomplete",
 	"displayName": "AngularJS extension",
 	"description": "A extension to provide auto complit, snippets and documentation for angularJS",
-	"publisher": "",
+	"publisher": "stg",
 	"version": "1.0.0",
 	"engines": {
 		"vscode": "^1.26.1"
@@ -13,15 +13,21 @@
 	"activationEvents": [
 		"onLanguage:javascript"
 	],
-	"main": "./src/extension.js",
+	"main": "./dist/extension",
 	"contributes": {},
 	"scripts": {
+		"vscode:prepublish": "webpack --mode production",
+		"compile": "webpack --mode none",
+		"watch": "webpack --mode none --watch",
+		"test-compile": "tsc -p ./",
 		"postinstall": "node ./node_modules/vscode/bin/install",
 		"test": "node ./node_modules/vscode/bin/test"
 	},
 	"devDependencies": {
 		"typescript": "^3.3.1",
-		"vscode": "^1.1.28"
+		"vscode": "^1.1.28",
+		"webpack": "^4.29.6",
+		"webpack-cli": "^3.3.0"
 	},
 	"repository": {
 		"type": "git",

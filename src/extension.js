@@ -17,11 +17,14 @@ function activate(context) {
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "AngularJS extension" is now active!');
+	vscode.window.showInformationMessage('AngularJS extension is now active');
 	loadServices();
 
 	function loadServices() {
 		services = {};
 		docHovers = {};
+
+		vscode.window.showInformationMessage('Start Analyzing');
 
 		let folders = vscode.workspace.workspaceFolders;
 		folders.forEach(folder => {
@@ -30,11 +33,13 @@ function activate(context) {
 
 			readFolder(path);
 		});
+
+		vscode.window.showInformationMessage('All files analysed');
 	}
 
 	vscode.workspace.onDidSaveTextDocument(document => {
 		let fileType = document.fileName.substring(document.fileName.indexOf('.') + 1);
-		if (fileType == 'service.js') processFile(document.getText());
+		if (fileType == 'service.js') loadServices();
 	});
 
 	vscode.workspace.onDidChangeWorkspaceFolders(event => loadServices());
@@ -94,13 +99,13 @@ function activate(context) {
 
 
 						let funcSnip = new vscode.CompletionItem(prop);
-						funcSnip.sortText = '00';
+						funcSnip.sortText = key + '.';
 						funcSnip.documentation = mark;
 
 						if (services[key][prop].isFunc) funcSnip.kind = vscode.CompletionItemKind.Function;
 						else funcSnip.kind = vscode.CompletionItemKind.Property;
 
-						if (services[key][prop].snip !== null && services[key][prop].snip != '')
+						if (services[key][prop].snip !== null && services[key][prop].snip !== '')
 							funcSnip.insertText = new vscode.SnippetString(services[key][prop].snip);
 						else funcSnip.insertText = new vscode.SnippetString(prop);
 

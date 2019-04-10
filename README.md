@@ -1,4 +1,4 @@
-# AngularJS extension README
+# AngularJS extension
 
 This extension add the support for autocomplete, documentation and a faster approach to snippets.
 
