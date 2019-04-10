@@ -41,7 +41,7 @@ Snippets also can be multi line
  * @param yourParameter Your parameter description
  * @snippet
  * $$scope.${1:FUNCTION_NAME} = function($2) {
- * \t$3
+ *     $3
  * };
  * @return what your function returns
  */
