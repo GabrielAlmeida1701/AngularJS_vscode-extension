@@ -93,20 +93,22 @@ function activate(context) {
 					let serv = services[key];
 
 					Object.keys(serv).forEach(prop => {
-
-						let mark = new vscode.MarkdownString(services[key][prop].doc);
-						mark.isTrusted = true;
-
-
 						let funcSnip = new vscode.CompletionItem(prop);
-						funcSnip.sortText = key + '.';
-						funcSnip.documentation = mark;
+						funcSnip.sortText = '0000';
+
+						let doc = services[key][prop].doc;
+						if (doc !== null && doc !== '' && doc !== undefined) {
+							let mark = new vscode.MarkdownString(doc);
+							mark.isTrusted = true;
+							funcSnip.documentation = mark;
+						}
 
 						if (services[key][prop].isFunc) funcSnip.kind = vscode.CompletionItemKind.Function;
 						else funcSnip.kind = vscode.CompletionItemKind.Property;
 
-						if (services[key][prop].snip !== null && services[key][prop].snip !== '')
-							funcSnip.insertText = new vscode.SnippetString(services[key][prop].snip);
+						let snip = services[key][prop].snip;
+						if (snip !== null && snip !== '' && snip !== undefined)
+							funcSnip.insertText = new vscode.SnippetString(snip);
 						else funcSnip.insertText = new vscode.SnippetString(prop);
 
 						snippets.push(funcSnip);
@@ -157,11 +159,22 @@ function activate(context) {
 	}
 
 	function processFile(data) {
+		let isFactory = false;
 		let serviceNameStr = data.match(/service\('(.*?)(?=')/g);
+		if(serviceNameStr === null) {
+			isFactory = true;
+			serviceNameStr = data.match(/factory\('(.*?)(?=')/g);
+		}
 
 		if (serviceNameStr !== null) {
-			let serviceName = serviceNameStr[0].replace(/service\('/g, '');
-			let functions = data.match(/this\.(.*)=(\s*)((?=f)|(?=a))/g);
+			let serviceName = '';
+			let functions = null;
+			
+			if(isFactory) serviceName = serviceNameStr[0].replace(/factory\('/g, '');
+			else serviceName = serviceNameStr[0].replace(/service\('/g, '');
+
+			if(isFactory) functions = data.match(/function\s([a-zA-Z0-9])*/g);
+			else functions = data.match(/(this|self)\.(.*)=(\s*)((?=f)|(?=a))/g);
 			let funcsAux = [];
 
 			services[serviceName] = {};
@@ -191,12 +204,12 @@ function activate(context) {
 				});
 			}
 
-			let vars = data.match(/this\.(\w*)/g);
+			let vars = data.match(/(this|self)\.(\w*)/g);
 			if (vars !== null) {
 				let aux = [];
 
 				vars.forEach(varName => {
-					let name = varName.replace(/\s/g, '').replace('this.', '');
+					let name = varName.replace(/\s/g, '').replace('this.', '').replace('self.', '');
 
 					if (aux.indexOf(name) == -1 && funcsAux.indexOf(name) == -1) {
 						aux.push(name);
