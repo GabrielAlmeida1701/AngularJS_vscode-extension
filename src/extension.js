@@ -2,6 +2,8 @@
 // Import the module and reference it with the alias vscode in your code below
 const vscode = require('vscode');
 const fs = require('fs');
+const folha = require('./folhaCommands')
+const commands = new folha.FolhaCommands();
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -14,6 +16,11 @@ function activate(context) {
 	var services = {};
 	var docHovers = {};
 
+	context.subscriptions.push(vscode.commands.registerCommand('folhaW.launcherPage', commands.createDefaultPage))
+	context.subscriptions.push(vscode.commands.registerCommand('folhaW.crudPage', commands.createCrudPage))
+	context.subscriptions.push(vscode.commands.registerCommand('folhaW.createComponent', commands.createComponent))
+	context.subscriptions.push(vscode.commands.registerCommand('folhaW.debugSettings', commands.createDebugFile))
+
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "AngularJS extension" is now active!');
@@ -23,8 +30,6 @@ function activate(context) {
 	function loadServices() {
 		services = {};
 		docHovers = {};
-
-		vscode.window.showInformationMessage('Start Analyzing');
 
 		let folders = vscode.workspace.workspaceFolders;
 		folders.forEach(folder => {
@@ -134,6 +139,7 @@ function activate(context) {
 		}
 	}, '@');
 
+	/** @param { string } path */
 	function readFolder(path) {
 		fs.readdir(path, function (err, files) {
 			if (err) {
@@ -158,6 +164,7 @@ function activate(context) {
 		});
 	}
 
+	/** @param { string } data */
 	function processFile(data) {
 		let isFactory = false;
 		let serviceNameStr = data.match(/service\('(.*?)(?=')/g);
@@ -168,6 +175,8 @@ function activate(context) {
 
 		if (serviceNameStr !== null) {
 			let serviceName = '';
+
+			/** @param { string[] } funcName */
 			let functions = null;
 			
 			if(isFactory) serviceName = serviceNameStr[0].replace(/factory\('/g, '');
@@ -207,7 +216,6 @@ function activate(context) {
 			let vars = data.match(/(this|self)\.(\w*)/g);
 			if (vars !== null) {
 				let aux = [];
-
 				vars.forEach(varName => {
 					let name = varName.replace(/\s/g, '').replace('this.', '').replace('self.', '');
 
@@ -224,6 +232,11 @@ function activate(context) {
 		return false;
 	}
 
+	/**
+	 * @param { string } data
+	 * @param { number } id
+	 * @param { string } serviceName
+	 */
 	function getDocumentation(data, id, serviceName) {
 		let aux = data.substring(0, id);
 		let endDoc = aux.lastIndexOf('*/');
@@ -235,6 +248,7 @@ function activate(context) {
 				let doc = aux.substring(strDoc, endDoc);
 				let axDoc = doc.split('*');
 				let fDoc = '';
+
 				axDoc.forEach(line => {
 					let l = line.trim().replace(/\s{2,}/g, '');
 					if (l != '/' && l != '') {
@@ -273,6 +287,10 @@ function activate(context) {
 		};
 	}
 
+	/**
+	 * @param {import("vscode").TextDocument} document
+	 * @param {import("vscode").Position} position
+	 */
 	function getTextBeforeCursor(document, position) {
 		return document.lineAt(position).text.slice(0, position.character);
 	}
