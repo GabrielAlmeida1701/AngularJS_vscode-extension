@@ -4,6 +4,7 @@ const vscode = require('vscode');
 const fs = require('fs');
 const folha = require('./folhaCommands')
 const commands = new folha.FolhaCommands();
+const folinha = new (require('./folinha/folinha')).Folinha;
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -16,31 +17,69 @@ function activate(context) {
 	var services = {};
 	var docHovers = {};
 
+	folinha.setExtensionPath(context.extensionPath)
+
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.launcherPage', commands.createDefaultPage))
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.crudPage', commands.createCrudPage))
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.createComponent', commands.createComponent))
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.debugSettings', commands.createDebugFile))
+	context.subscriptions.push(vscode.commands.registerCommand('folhaW.duken', folinha.buildFolinha))
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "AngularJS extension" is now active!');
-	vscode.window.showInformationMessage('AngularJS extension is now active');
-	loadServices();
+	console.log('AngularJS extension is now active!');
+	// vscode.window.showInformationMessage('AngularJS extension is now active');
 
 	function loadServices() {
+		vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Analisando workspace',
+			cancellable: false
+		}, (progress, token) => {
+			loadWorkpace(progress, token);
+			return new Promise(resolve => resolve());
+		})
+	}
+
+	/**
+	 * @param {import("vscode").Progress<{ message?: string; increment?: number; }>} progress
+	 * @param {import("vscode").CancellationToken} token
+	 */
+	function loadWorkpace(progress, token) {
 		services = {};
 		docHovers = {};
-
 		let folders = vscode.workspace.workspaceFolders;
+		let status = 0
+		let allFiles = []
+		let promisses = []
+
 		folders.forEach(folder => {
 			let path = folder.uri.toString(true);
 			path = path.replace('file:///', '');
+			
+			promisses.push(teste(path))
+		})
 
-			readFolder(path);
-		});
+		Promise.all(promisses).then(files => {
+			files.forEach(f => allFiles = allFiles.concat(f))
 
-		vscode.window.showInformationMessage('All files analysed');
+			allFiles.forEach(file => {
+				fs.readFile(file, 'utf8', (err, data) => {
+					let success = false
+					if (err) console.error('could´t read file ' + file);
+					else if (processFile(data)) success = true
+
+					status++
+					progress.report({
+						increment: Math.round((status / allFiles.length) * 100),
+						message: `${file} finalizado com ${success? 'Sucesso' : 'Erro'}!`
+					})
+				});
+			})
+		})
 	}
+
+	loadServices();
 
 	vscode.workspace.onDidSaveTextDocument(document => {
 		let fileType = document.fileName.substring(document.fileName.indexOf('.') + 1);
@@ -159,6 +198,38 @@ function activate(context) {
 							else if (processFile(data)) console.log(file + ' Analysed!');
 						});
 					}
+				}
+			});
+		});
+	}
+
+	function teste(path) {
+		let fList = []
+		let aux = []
+
+		return new Promise(resolve => {
+			fs.readdir(path, function (err, files) {
+				if (err) {
+					console.log('error!');
+				}
+	
+				files.forEach(async (file) => {
+					let fPath = path + "/" + file;
+					let isFolder = fs.lstatSync(fPath).isDirectory();
+	
+					if (isFolder) aux.push(teste(fPath))
+					else {
+						let fileType = file.substring(file.indexOf('.') + 1);
+						if (fileType == 'service.js') fList.push(fPath)
+					}
+				});
+
+				if(aux.length == 0) resolve(fList);
+				else {
+					Promise.all(aux).then(subFiles => {
+						subFiles.forEach(f => fList = fList.concat(f))
+						resolve(fList);
+					})
 				}
 			});
 		});

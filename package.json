@@ -3,7 +3,7 @@
 	"displayName": "AngularJS extension",
 	"description": "A extension to provide auto complit, snippets and documentation for angularJS",
 	"publisher": "stg",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"engines": {
 		"vscode": "^1.26.1"
 	},
@@ -31,6 +31,29 @@
 			{
 				"command": "folhaW.debugSettings",
 				"title": "Criar arquivo para debugar no W"
+			},
+			{
+				"command": "folhaW.duken",
+				"title": "Folinha"
+			}
+		],
+		"configuration": [
+			{
+				"title": "Skw VSCode",
+				"properties": {
+					"conf.view.diretorioRaizDasPaginas": {
+						"type": "string",
+						"default": "C:/sk-java/workspace/SankhyaW/MGE-Pes-VC/build/html5",
+						"description": "O caminha raiz de onde as paginas devem ser criadas",
+						"scope": "application"
+					},
+					"conf.view.diretorioRaizDosComponentes": {
+						"type": "string",
+						"default": "C:/sk-java/workspace/SankhyaW/folha-js/src/components/",
+						"description": "O caminha raiz de onde oc componentes devem ser criadas",
+						"scope": "application"
+					}
+				}
 			}
 		]
 	},

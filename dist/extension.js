@@ -100,6 +100,7 @@ const vscode = __webpack_require__(/*! vscode */ "vscode");
 const fs = __webpack_require__(/*! fs */ "fs");
 const folha = __webpack_require__(/*! ./folhaCommands */ "./src/folhaCommands.js")
 const commands = new folha.FolhaCommands();
+const folinha = new (__webpack_require__(/*! ./folinha/folinha */ "./src/folinha/folinha.js")).Folinha;
 
 // this method is called when your extension is activated
 // your extension is activated the very first time the command is executed
@@ -112,31 +113,69 @@ function activate(context) {
 	var services = {};
 	var docHovers = {};
 
+	folinha.setExtensionPath(context.extensionPath)
+
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.launcherPage', commands.createDefaultPage))
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.crudPage', commands.createCrudPage))
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.createComponent', commands.createComponent))
 	context.subscriptions.push(vscode.commands.registerCommand('folhaW.debugSettings', commands.createDebugFile))
+	context.subscriptions.push(vscode.commands.registerCommand('folhaW.duken', folinha.buildFolinha))
 
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "AngularJS extension" is now active!');
-	vscode.window.showInformationMessage('AngularJS extension is now active');
-	loadServices();
+	console.log('AngularJS extension is now active!');
+	// vscode.window.showInformationMessage('AngularJS extension is now active');
 
 	function loadServices() {
+		vscode.window.withProgress({
+			location: vscode.ProgressLocation.Notification,
+			title: 'Analisando workspace',
+			cancellable: false
+		}, (progress, token) => {
+			loadWorkpace(progress, token);
+			return new Promise(resolve => resolve());
+		})
+	}
+
+	/**
+	 * @param {import("vscode").Progress<{ message?: string; increment?: number; }>} progress
+	 * @param {import("vscode").CancellationToken} token
+	 */
+	function loadWorkpace(progress, token) {
 		services = {};
 		docHovers = {};
-
 		let folders = vscode.workspace.workspaceFolders;
+		let status = 0
+		let allFiles = []
+		let promisses = []
+
 		folders.forEach(folder => {
 			let path = folder.uri.toString(true);
 			path = path.replace('file:///', '');
+			
+			promisses.push(teste(path))
+		})
 
-			readFolder(path);
-		});
+		Promise.all(promisses).then(files => {
+			files.forEach(f => allFiles = allFiles.concat(f))
 
-		vscode.window.showInformationMessage('All files analysed');
+			allFiles.forEach(file => {
+				fs.readFile(file, 'utf8', (err, data) => {
+					let success = false
+					if (err) console.error('could´t read file ' + file);
+					else if (processFile(data)) success = true
+
+					status++
+					progress.report({
+						increment: Math.round((status / allFiles.length) * 100),
+						message: `${file} finalizado com ${success? 'Sucesso' : 'Erro'}!`
+					})
+				});
+			})
+		})
 	}
+
+	loadServices();
 
 	vscode.workspace.onDidSaveTextDocument(document => {
 		let fileType = document.fileName.substring(document.fileName.indexOf('.') + 1);
@@ -255,6 +294,38 @@ function activate(context) {
 							else if (processFile(data)) console.log(file + ' Analysed!');
 						});
 					}
+				}
+			});
+		});
+	}
+
+	function teste(path) {
+		let fList = []
+		let aux = []
+
+		return new Promise(resolve => {
+			fs.readdir(path, function (err, files) {
+				if (err) {
+					console.log('error!');
+				}
+	
+				files.forEach(async (file) => {
+					let fPath = path + "/" + file;
+					let isFolder = fs.lstatSync(fPath).isDirectory();
+	
+					if (isFolder) aux.push(teste(fPath))
+					else {
+						let fileType = file.substring(file.indexOf('.') + 1);
+						if (fileType == 'service.js') fList.push(fPath)
+					}
+				});
+
+				if(aux.length == 0) resolve(fList);
+				else {
+					Promise.all(aux).then(subFiles => {
+						subFiles.forEach(f => fList = fList.concat(f))
+						resolve(fList);
+					})
 				}
 			});
 		});
@@ -421,14 +492,25 @@ __webpack_require__.r(__webpack_exports__);
 const vscode = __webpack_require__(/*! vscode */ "vscode");
 const fs = __webpack_require__(/*! fs */ "fs");
 const join = __webpack_require__(/*! path */ "path").join;
-
 const launcher = __webpack_require__(/*! ./templates/launcher */ "./src/templates/launcher.js").launcher
-
-const PesVC = 'C:/sk-java/workspace/SankhyaW/MGE-Pes-VC/build/html5';
 
 class FolhaCommands {
 
     constructor() {
+        //#region Read Settings
+        /** @returns {string} */
+        const GetPesVC = () => {
+            let pesVC = vscode.workspace.getConfiguration().get('conf.view.diretorioRaizDasPaginas')
+            return pesVC
+        }
+
+        /** @returns {string} */
+        const GetFolhaJS = () => {
+            let pesVC = vscode.workspace.getConfiguration().get('conf.view.diretorioRaizDosComponentes')
+            return pesVC
+        }
+        //#endregion
+
         //#region Functions
         /** @param { string } path */
         const createFolder = (path) => {
@@ -443,7 +525,7 @@ class FolhaCommands {
             if(result === undefined || result.trim() == '') return;
 
             result = result.replace(/\s/g, '');
-            let folder = join(PesVC, result)
+            let folder = join(GetPesVC(), result)
             let created = createFolder(folder);
 
             if(!created) throw new Error(`Não foi possivel criar ${result} verifique se a pagina não existe`)
@@ -457,11 +539,14 @@ class FolhaCommands {
          */
         const filePath = (file, type, path) => join(path, `${file}.${type}`)
 
+        /** @param {string} val */
+        const frstUpper = (val) => val.substring(0,1).toUpperCase() + val.substring(1)
+
         /** 
          * @param {string} file 
          * @param {string} pageName 
          * */
-        const content = (file, pageName) => file.substring(1).replace(/__PAGENAME__/g, pageName)
+        const content = (file, pageName) => file.substring(1).replace(/__PAGENAME__/g, pageName).replace(/__UPPERPAGENAME__/g, frstUpper(pageName))
 
         /** 
          * @param {string} html
@@ -480,12 +565,13 @@ class FolhaCommands {
             fs.writeFileSync( filePath(result, 'body'   , lchPath) , content(launcher.body, result)    )
             fs.writeFileSync( filePath(result, 'include', lchPath) , content(launcher.include, result) )
 
-            fs.writeFileSync( join(PesVC, `launcher/${result}.libs`), content(launcher.mainLauncher, result) )
-            vscode.window.showInformationMessage('Done!')
+            fs.writeFileSync( join(GetPesVC(), `launcher/${result}.libs`), content(launcher.mainLauncher, result) )
+            vscode.window.showInformationMessage(`Pagina ${result} criada com sucesso!`)
         }
         //#endregion
 
         this.createDefaultPage = async () => {
+            GetPesVC();
             let { html, js, css } = __webpack_require__(/*! ./templates/lancamento */ "./src/templates/lancamento.js").lancamento
             createPage(html, js, css)
         }
@@ -496,14 +582,45 @@ class FolhaCommands {
         }
 
         this.createComponent = async () => {
-            let { folder, result } = await initPage();
-            if(folder === undefined) return;
+            let result = await vscode.window.showInputBox();
+            if(result === undefined || result.trim() == '') return;
+            
+            result = result.replace(/\s/g, '');
+            if(result.toLowerCase().indexOf('mat') == -1) {
+                vscode.window.showWarningMessage('Por padrão todos os nomes de componentes devem terminar com Mat')
+                result += 'Mat'
+            }
 
-            if(result.indexOf('Mat') == -1) vscode.window.showWarningMessage('Por padrão todos os componentes devem ser seguidos por ***Mat***')
+            let folder = join(GetFolhaJS(), result)
+            if(fs.existsSync(folder)) {
+                vscode.window.showErrorMessage(`O componente ${result} ja existe`)
+                return;
+            } else fs.mkdirSync(folder);
+
+            let { html, less, _module, directive, controller } = __webpack_require__(/*! ./templates/component */ "./src/templates/component.js").component
+            fs.writeFileSync( filePath(result, 'tpl.html', folder) , content(html, result) )
+            fs.writeFileSync( filePath(result, 'module.js', folder) , content(_module, result) )
+            fs.writeFileSync( filePath(result, 'directive.js', folder) , content(directive, result) )
+            fs.writeFileSync( filePath(result, 'controller.js', folder) , content(controller, result) )
+
+            let upper = 'ABCDEFGHIJKLMNOPQRSTUVXYWZ'
+            let directiveName = 'folha-';
+            for(let i=0; i<result.length; i++) {
+                let c = result[i]
+                if(i == 0) c = c.toLowerCase();
+
+                if(upper.indexOf(c) != -1) directiveName += '-'
+                directiveName += c.toLowerCase();
+            }
+            let lessContent = less.substring(1).replace(/__PAGENAME__/g, directiveName)
+            fs.writeFileSync( filePath(result, 'less', folder), lessContent )
+
+            vscode.window.showInformationMessage(`Componente ${result} criado com sucesso!`)
         }
 
         this.createDebugFile = () => {
-            let path = join('C:/sk-java/workspace/SankhyaW/MGE-Pes-VC', '/.vscode/')
+            let base = GetPesVC().replace('/build/html5', '');
+            let path = join(base, '/.vscode/')
             let launch = join(path, 'launch.json')
             let content = __webpack_require__(/*! ./templates/vscodeLauncher */ "./src/templates/vscodeLauncher.js").vscodeLauncher
 
@@ -522,6 +639,167 @@ class FolhaCommands {
         }
     }
 }
+
+/***/ }),
+
+/***/ "./src/folinha/folinha.js":
+/*!********************************!*\
+  !*** ./src/folinha/folinha.js ***!
+  \********************************/
+/*! exports provided: Folinha */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "Folinha", function() { return Folinha; });
+const vscode = __webpack_require__(/*! vscode */ "vscode");
+const join = __webpack_require__(/*! path */ "path").join;
+
+const FolinhaUtils = {
+    /** @type {import('vscode').WebviewPanel} */
+    panel: undefined,
+    extensionPath: ''
+}
+class Folinha {
+    constructor() {
+        /** @param {string} path */
+        this.setExtensionPath = (path) => FolinhaUtils.extensionPath = path
+
+        this.buildFolinha = () => {
+            const column = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined;
+
+            // if(FolinhaUtils.panel !== undefined) {
+            //     FolinhaUtils.panel.reveal(column)
+            //     return;
+            // }
+
+            const panel = vscode.window.createWebviewPanel('folinhaGame', 'Folinha', column || vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                localResourceRoots: [
+                    vscode.Uri.file(join(FolinhaUtils.extensionPath, 'resources'))
+                ]
+            })
+
+            FolinhaUtils.panel = panel;
+
+            this.start();
+        }
+
+        this.start = () => {
+            FolinhaUtils.panel.webview.html = this.getBaseHTML()
+            FolinhaUtils.panel.onDidDispose(() => this.dispose())
+        }
+
+        this.dispose = () => {
+            // FolinhaUtils.panel.webview.postMessage({ dispose: true })
+            FolinhaUtils.panel.dispose();
+            FolinhaUtils.panel = undefined
+        }
+
+        this.getBaseHTML = () => {
+            /** Local path to main script run in the webview
+             * And the uri we use to load this script in the webview
+             * @param {string} file
+             * @param {string} ext
+             * */
+            const getFile = (file, ext) => vscode.Uri.file( join(FolinhaUtils.extensionPath, 'resources', file +'.' + ext) ).with({ scheme: 'vscode-resource' });
+
+            // Use a nonce to whitelist which scripts can be run
+            const getNonce = () => {
+                let text = '';
+                const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                for (let i = 0; i < 32; i++) {
+                    text += possible.charAt(Math.floor(Math.random() * possible.length));
+                }
+                return text;
+            }
+
+            let nonce = getNonce()
+
+            return `<!DOCTYPE html>
+            <html lang="en">
+            <head>
+                <meta charset="UTF-8">
+                <!--
+                Use a content security policy to only allow loading images from https or from our extension directory,
+                and only allow scripts that have a specific nonce.
+                -->
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src vscode-resource: https:; script-src 'self' 'nonce-${nonce}'; style-src vscode-resource:">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <title>Folinha</title>
+                <link rel="stylesheet" href="${ getFile('style', 'css') }" type="text/css">
+            </head>
+            <body>
+                <img src='${ getFile('tileTest', 'png') }' id="tilemap">
+                <img src='${ getFile('dude', 'png') }' id="player">
+                <canvas id='draw-area'></canvas>
+                <script nonce="${ nonce }" src="${ getFile('main', 'js') }"></script>
+            </body>
+            </html>`;
+        }
+    }
+}
+
+/***/ }),
+
+/***/ "./src/templates/component.js":
+/*!************************************!*\
+  !*** ./src/templates/component.js ***!
+  \************************************/
+/*! exports provided: component */
+/***/ (function(module, __webpack_exports__, __webpack_require__) {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export (binding) */ __webpack_require__.d(__webpack_exports__, "component", function() { return component; });
+var data = {
+    html: '', less: '', directive: '', controller: '', _module: ''
+}
+
+//#region LESS
+data.less = `
+__PAGENAME__ {
+}`
+//#endregion
+
+//#region HTML
+data.html = ' <p>__PAGENAME__ it`s working!</p>'
+//#endregion
+
+//#region MODULE
+data._module = ` angular.module('folha.components.__PAGENAME__', ['ngMaterial']);`
+//#endregion
+
+//#region DIRECTIVE
+data.directive = `
+angular
+    .module('folha.components.__PAGENAME__')
+    .directive('folha__UPPERPAGENAME__', ['$timeout', 'StringUtils',
+    function ($timeout, StringUtils) {
+        var link = function(scope,element, attrs,controller){}
+        return{
+            templateUrl: "components/__PAGENAME__/__PAGENAME__.tpl.html",
+            transclude: true,
+            scope:{
+            },
+            controller: "Folha__UPPERPAGENAME__Controller",
+            link: link
+        };
+    }]);`
+//#endregion
+
+//#region CONTROLLER
+data.controller = `
+angular
+    .module('folha.components.__PAGENAME__')
+    .controller('Folha__UPPERPAGENAME__Controller', ['$scope', '$timeout',
+    function ($scope, $timeout) {
+
+    }]);`
+//#endregion
+
+const component = data
 
 /***/ }),
 
